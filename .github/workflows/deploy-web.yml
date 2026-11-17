@@ -59,6 +59,11 @@ jobs:
           EXPO_NO_TELEMETRY: "1"
         run: npx expo export --platform web
 
+      # PWA / 手机端 head 标签：output 是 "single" 时 app/+html.tsx 不生效，
+      # 所以用脚本后处理（只改 head，不动 JS）。必须在生成 404.html 之前跑。
+      - name: Inject PWA head tags
+        run: node scripts/patch-web-head.mjs dist
+
       - name: SPA fallback for deep links
         run: cp dist/index.html dist/404.html
 
