@@ -41,3 +41,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# 客户素材与成片工作目录（体积大、属客户资产）
+.lookbook/
