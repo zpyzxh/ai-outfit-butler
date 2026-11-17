@@ -354,24 +354,40 @@ export async function fetchHomeInspiration(): Promise<HomeFeedResult> {
     const rows = await withRetry(selectInspirationPosts);
 
     if (rows.length) {
-      return {
-        items: rows.map((row) => {
-          const mediaType = row.media_type;
-          const linkedGarmentId = row.garment_id ?? null;
-          return {
-            id: row.id,
-            garmentId: linkedGarmentId,
-            kind: mediaType === 'video' ? 'video' as const : 'image' as const,
-            title: row.caption || (mediaType === 'video' ? '穿搭短视频' : '穿搭灵感'),
-            subtitle: linkedGarmentId
-              ? '社区发布 · 可试穿'
-              : (mediaType === 'video' ? '社区发布 · 视频' : '社区发布 · 图片'),
-            uri: row.media_url,
-            ...(mediaType === 'video' ? { videoUrl: row.media_url } : {}),
-          };
-        }),
-        warning: null,
-      };
+      const community: HomeInspiration[] = rows.map((row) => {
+        const mediaType = row.media_type;
+        const linkedGarmentId = row.garment_id ?? null;
+        return {
+          id: row.id,
+          garmentId: linkedGarmentId,
+          kind: mediaType === 'video' ? ('video' as const) : ('image' as const),
+          title: row.caption || (mediaType === 'video' ? '穿搭短视频' : '穿搭灵感'),
+          subtitle: linkedGarmentId
+            ? '社区发布 · 可试穿'
+            : mediaType === 'video'
+              ? '社区发布 · 视频'
+              : '社区发布 · 图片',
+          uri: row.media_url,
+          ...(mediaType === 'video' ? { videoUrl: row.media_url } : {}),
+        };
+      });
+
+      // 社区内容太少时首页会显得空旷（刚上线只有 2 条），用单品灵感补到 6 条。
+      // 补的内容一律排在社区内容之后，不打乱「人发的在前」这个顺序。
+      const FILL_TO = 6;
+      if (community.length < FILL_TO) {
+        const garments = await fetchGarments().catch(() => [] as Garment[]);
+        const usedGarmentIds = new Set(
+          community.map((item) => item.garmentId).filter((id): id is string => Boolean(id)),
+        );
+        const fillers = garments
+          .filter((garment) => !usedGarmentIds.has(garment.id))
+          .slice(0, FILL_TO - community.length)
+          .map(toGarmentInspiration);
+        return { items: [...community, ...fillers], warning: null };
+      }
+
+      return { items: community, warning: null };
     }
   } catch {
     // 灵感流读取失败仍然回退到衣服素材，但把失败原因透出，避免「静默吞错」
