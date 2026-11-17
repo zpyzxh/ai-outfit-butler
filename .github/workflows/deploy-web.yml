@@ -62,11 +62,12 @@ jobs:
       - name: SPA fallback for deep links
         run: cp dist/index.html dist/404.html
 
-      # enablement: true 会在第一次运行时用 GITHUB_TOKEN 自动把 Pages 的
-      # Source 切到 "GitHub Actions"（省掉去 Settings 手动点那一步）
+      # 注意：这里不能加 enablement: true。
+      # 实测（run #1）该参数会失败 —— 开启 Pages 属于仓库 admin 权限，
+      # 而 GITHUB_TOKEN 没有 admin（它只有 pages: write 的部署权）。
+      # 所以 Pages 的 Source 需要在 Settings → Pages 里手动选一次
+      # "GitHub Actions"；之后这个 action 只负责解析 base_path，不再改配置。
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
