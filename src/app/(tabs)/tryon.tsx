@@ -790,6 +790,7 @@ export default function TryonScreen() {
             </View>
           ) : null}
 
+          {generating ? null : (
           <View style={styles.searchBox}>
             <AppIcon name="search" size={15} color={colors.muted} />
             <TextInput
@@ -806,6 +807,8 @@ export default function TryonScreen() {
             ) : null}
           </View>
 
+          )}
+          {generating ? null : (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
             {CATEGORIES.map((category) => {
               const active = activeCategory === category;
@@ -820,6 +823,7 @@ export default function TryonScreen() {
               );
             })}
           </ScrollView>
+          )}
 
           {chain.length > 0 ? (
             <View style={styles.chainRow}>
@@ -836,7 +840,7 @@ export default function TryonScreen() {
             </View>
           ) : null}
 
-          {loadingGarments ? (
+          {generating ? null : loadingGarments ? (
             <View style={styles.listState}>
               <ActivityIndicator color={colors.muted} />
               <Text style={styles.listStateText}>正在读取衣橱…</Text>
@@ -919,12 +923,7 @@ export default function TryonScreen() {
                     ]}
                   />
                 </View>
-                <View style={styles.progressFoot}>
-                  <Text style={styles.progressHint}>{stageLabel} · 单张约需 40–70 秒</Text>
-                  <Pressable onPress={cancelTryon} hitSlop={10} style={styles.cancelButton}>
-                    <Text style={styles.cancelText}>取消</Text>
-                  </Pressable>
-                </View>
+                <Text style={styles.progressHint}>{stageLabel} · 单张约需 40–70 秒，可随时取消</Text>
               </>
             ) : null}
           </View>
@@ -1072,17 +1071,23 @@ export default function TryonScreen() {
         ) : null}
 
         <Pressable
-          onPress={() => void startTryon()}
-          disabled={busy || !photoUrl || chain.length === 0}
-          style={[styles.cta, (busy || !photoUrl || chain.length === 0) && styles.ctaDisabled]}
+          onPress={generating ? cancelTryon : () => void startTryon()}
+          disabled={generating ? false : busy || !photoUrl || chain.length === 0}
+          style={[
+            styles.cta,
+            generating && styles.ctaCancel,
+            !generating && (busy || !photoUrl || chain.length === 0) && styles.ctaDisabled,
+          ]}
         >
-          {generating ? (
-            <Text style={styles.ctaText}>生成中…</Text>
-          ) : (
-            <Text style={styles.ctaText}>
-              {resultUrl ? '再试一次' : chain.length > 1 ? `依次试穿 ${chain.length} 件` : '生成试穿效果'}
-            </Text>
-          )}
+          <Text style={[styles.ctaText, generating && styles.ctaCancelText]}>
+            {generating
+              ? '取消生成'
+              : resultUrl
+                ? '再试一次'
+                : chain.length > 1
+                  ? `依次试穿 ${chain.length} 件`
+                  : '生成试穿效果'}
+          </Text>
         </Pressable>
 
         <Text style={styles.privacy}>照片仅用于本次生成，发布到社区需要你手动操作。</Text>
@@ -1349,15 +1354,12 @@ const makeStyles = (theme: Theme) => {
     progressLabel: { ...type.body, color: colors.text, fontSize: 12 },
     progressTrack: { height: 3, borderRadius: 2, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
     progressFill: { height: '100%', backgroundColor: colors.accent },
-    progressFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-    cancelButton: {
-      paddingHorizontal: spacing.sm,
-      paddingVertical: 4,
-      borderRadius: radius.pill,
+    ctaCancel: {
+      backgroundColor: colors.surface,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.text,
     },
-    cancelText: { ...type.caption, color: colors.muted },
+    ctaCancelText: { color: colors.text },
     progressHint: { ...type.caption, color: colors.muted, fontSize: 10 },
 
     resultBlock: { gap: spacing.sm },
