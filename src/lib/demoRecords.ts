@@ -13,9 +13,13 @@ import { DEMO_MODE } from '@/lib/demo';
 
 const PUBLIC = 'https://ydcajujmhlksjgrhjgtl.supabase.co/storage/v1/object/public';
 
-/** 两条真实试穿结果（原始记录在私有桶里，这里用公开副本，访客无需登录即可显示） */
-const RESULT_A = `${PUBLIC}/inspiration-posts/demo/result-1-1794896028227.jpg`;
-const RESULT_B = `${PUBLIC}/inspiration-posts/demo/result-2-1794896049229.jpg`;
+/**
+ * 三条真实产出（原始记录在私有桶里，这里用公开副本，访客无需登录即可显示）。
+ * 命名跟图片里实际穿的那件对齐 —— 演示数据的标题和画面对不上时，被面试官一眼看出会很减分。
+ */
+const RESULT_OUTER = `${PUBLIC}/inspiration-posts/demo/result-1-1794896028227.jpg`; // 米色羊毛西装外套
+const RESULT_PANTS = `${PUBLIC}/inspiration-posts/demo/result-2-1794896049229.jpg`; // 驼色百褶阔腿裤
+const RESULT_KNIT = `${PUBLIC}/inspiration-posts/demo/knit-frame-1794923598940.jpg`; // 奶白针织长袖（视频首帧）
 /** 真实的 5 秒成片（含转身定格背面），源任务 3d92efdc-… */
 const MOTION = `${PUBLIC}/garments/demo/sample-motion.mp4`;
 
@@ -37,38 +41,38 @@ const daysAgo = (days: number): string => new Date(Date.now() - days * 86_400_00
 
 export const DEMO_HISTORY: DemoHistoryTask[] = [
   {
-    id: 'demo-tryon-dress',
+    id: 'demo-tryon-outer',
     user_photo_url: `${PUBLIC}/garments/demo/sample-fullbody.jpg`,
-    first_frame_url: RESULT_A,
-    result_url: RESULT_A,
+    first_frame_url: RESULT_OUTER,
+    result_url: RESULT_OUTER,
     status: 'done',
     stage: 'tryon',
     output_type: 'image',
     created_at: daysAgo(0.2),
-    // 真实 garment id，点进去能预选那件单品
-    garment: { id: 'ed0d1a24-7aa0-47b7-81dd-973b4e057ecd', name: '鼠尾草绿亚麻连衣裙', category: '连衣裙' },
+    // 真实 garment id，点「再试一件」能预选那件单品
+    garment: { id: 'a989c595-dece-459c-8363-28d8eb23ee94', name: '米色羊毛西装外套', category: '外套' },
   },
   {
-    id: 'demo-tryon-knit',
+    id: 'demo-tryon-pants',
     user_photo_url: `${PUBLIC}/garments/demo/sample-fullbody.jpg`,
-    first_frame_url: RESULT_B,
-    result_url: RESULT_B,
+    first_frame_url: RESULT_PANTS,
+    result_url: RESULT_PANTS,
     status: 'done',
     stage: 'tryon',
     output_type: 'image',
     created_at: daysAgo(1.3),
-    garment: { id: 'a989c595-dece-459c-8363-28d8eb23ee94', name: '奶白针织长袖', category: '上装' },
+    garment: { id: 'e943f181-61bd-4f31-aad1-8796c0f2ba44', name: '驼色百褶阔腿裤', category: '下装' },
   },
   {
-    id: 'demo-video-dress',
+    id: 'demo-video-knit',
     user_photo_url: `${PUBLIC}/garments/demo/sample-fullbody.jpg`,
-    first_frame_url: RESULT_A,
+    first_frame_url: RESULT_KNIT,
     result_url: MOTION,
     status: 'done',
     stage: 'video',
     output_type: 'video',
     created_at: daysAgo(2.1),
-    garment: { id: 'ed0d1a24-7aa0-47b7-81dd-973b4e057ecd', name: '鼠尾草绿亚麻连衣裙', category: '连衣裙' },
+    garment: { id: 'e38ef13d-0653-44b0-80cd-a4b2cba994ba', name: '奶白针织长袖', category: '上装' },
   },
 ];
 

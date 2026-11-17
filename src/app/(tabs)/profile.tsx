@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,9 +15,11 @@ import { AccountSection } from '@/components/AccountSection';
 import { RecoverySection } from '@/components/RecoverySection';
 import { AppIcon } from '@/components/icons';
 import { ResultVideo } from '@/components/ResultVideo';
+import { WebVideo } from '@/components/WebVideo';
 import { StyleProfileSheet } from '@/components/StyleProfileSheet';
 import { ensureSession, useAuth } from '@/lib/auth';
 import { DEMO_HISTORY, isDemoRecord, shouldUseDemoHistory } from '@/lib/demoRecords';
+import { saveRemoteFile, suggestFilename } from '@/lib/download';
 import { toUserMessage } from '@/lib/errors';
 import { loadFavorites, toggleLookFavorite, type Favorites } from '@/lib/favorites';
 import { buildOutfits, type Outfit } from '@/lib/outfits';
@@ -65,6 +68,9 @@ export default function ProfileScreen() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // 点记录看大图/视频：原来点缩略图是直接跳回试衣页并重跑恢复逻辑，绕了一圈
+  const [viewTask, setViewTask] = useState<HistoryTask | null>(null);
+  const [viewHint, setViewHint] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   // 当前列表是不是「演示记录」，用来加标注并禁掉删除
   const [demoHistory, setDemoHistory] = useState(false);
@@ -271,21 +277,24 @@ export default function ProfileScreen() {
             {tasks.map((task) => {
               const busy = deletingId === task.id;
               return (
-                <View key={task.id} style={styles.taskCard}>
+                <Pressable
+                  key={task.id}
+                  style={styles.taskCard}
+                  onPress={() => {
+                    setViewHint(null);
+                    setViewTask(task);
+                  }}
+                  accessibilityLabel="打开这条记录"
+                >
                   <View style={styles.taskThumb}>
                     <TaskThumb
                       theme={theme}
                       styles={styles}
                       task={task}
-                      onOpen={() =>
-                        router.push({
-                          pathname: '/(tabs)/tryon',
-                          params: {
-                            ...(task.garment?.id ? { garmentId: task.garment.id } : {}),
-                            ...(task.output_type === 'video' ? { autoVideo: '1' } : {}),
-                          },
-                        } as never)
-                      }
+                      onOpen={() => {
+                        setViewHint(null);
+                        setViewTask(task);
+                      }}
                     />
                   </View>
                   <View style={styles.taskInfo}>
@@ -327,7 +336,7 @@ export default function ProfileScreen() {
                       )}
                     </View>
                   </View>
-                </View>
+                </Pressable>
               );
             })}
           </View>
@@ -483,6 +492,88 @@ export default function ProfileScreen() {
         <View style={styles.sectionGap} />
         <AccountSection />
       </ScrollView>
+
+      <Modal
+        visible={viewTask !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setViewTask(null)}
+      >
+        <View style={styles.viewerBackdrop}>
+          <Pressable style={styles.viewerFill} onPress={() => setViewTask(null)} />
+          {viewTask ? (
+            <View style={styles.viewerBody}>
+              {(() => {
+                const media = viewTask.result_url || viewTask.first_frame_url || viewTask.user_photo_url;
+                const isVideo = viewTask.output_type === 'video' || /\.mp4(\?|$)/.test(media ?? '');
+                if (!media) {
+                  return (
+                    <View style={[styles.viewerMedia, styles.thumbFallback]}>
+                      <Text style={styles.thumbFallbackText}>这条记录没有产出图</Text>
+                    </View>
+                  );
+                }
+                return isVideo ? (
+                  <View style={styles.viewerMedia}>
+                    {Platform.OS === 'web' ? (
+                      // 封面立刻可见；点播放再等加载（这段 mp4 要整段下完才有元数据）
+                      <WebVideo uri={media} poster={viewTask.first_frame_url || media} />
+                    ) : (
+                      <ResultVideo uri={media} />
+                    )}
+                  </View>
+                ) : (
+                  <Image source={{ uri: media }} style={styles.viewerMedia} resizeMode="contain" />
+                );
+              })()}
+
+              <Text style={styles.viewerTitle} numberOfLines={1}>
+                {viewTask.garment?.name || '试穿记录'}
+              </Text>
+              <Text style={styles.viewerMeta}>
+                {`${viewTask.garment?.category ? viewTask.garment.category + ' · ' : ''}${new Date(viewTask.created_at).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })} · ${STATUS_LABEL[viewTask.status] ?? '处理中'}`}
+              </Text>
+
+              <View style={styles.viewerActions}>
+                <Pressable
+                  style={styles.viewerBtn}
+                  onPress={() => {
+                    const media = viewTask.result_url || viewTask.first_frame_url || viewTask.user_photo_url;
+                    if (!media) return;
+                    const kind = viewTask.output_type === 'video' || /\.mp4(\?|$)/.test(media) ? 'video' : 'image';
+                    void saveRemoteFile(media, suggestFilename(kind, viewTask.id), kind).then((r) =>
+                      setViewHint(r.message),
+                    );
+                  }}
+                >
+                  <AppIcon name="download" size={15} color={colors.text} />
+                  <Text style={styles.viewerBtnText}>保存</Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.viewerBtn}
+                  onPress={() => {
+                    const garmentId = viewTask.garment?.id;
+                    setViewTask(null);
+                    router.push({
+                      pathname: '/(tabs)/tryon',
+                      params: garmentId ? { garmentId } : {},
+                    } as never);
+                  }}
+                >
+                  <AppIcon name="tryon" size={15} color={colors.text} />
+                  <Text style={styles.viewerBtnText}>再试一件</Text>
+                </Pressable>
+
+                <Pressable style={[styles.viewerBtn, styles.viewerBtnPrimary]} onPress={() => setViewTask(null)}>
+                  <Text style={[styles.viewerBtnText, styles.viewerBtnPrimaryText]}>关闭</Text>
+                </Pressable>
+              </View>
+              {viewHint ? <Text style={styles.viewerHint}>{viewHint}</Text> : null}
+            </View>
+          ) : null}
+        </View>
+      </Modal>
 
       <StyleProfileSheet
         visible={sheetOpen}
@@ -772,5 +863,58 @@ const makeStyles = (theme: Theme) => {
     actionError: { ...type.caption, color: colors.danger },
     privacyNote: { ...type.caption, color: colors.muted, lineHeight: 18, marginTop: spacing.xs },
     sectionGap: { height: spacing.md },
+    viewerBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(12,12,14,0.82)',
+      justifyContent: 'center',
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xl,
+    },
+    viewerFill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
+    viewerBody: {
+      borderRadius: radius.lg,
+      backgroundColor: colors.surface,
+      padding: spacing.sm,
+      gap: spacing.xs,
+    },
+    viewerPoster: { width: '100%', height: '100%' },
+    viewerPlayBadge: {
+      position: 'absolute',
+      alignSelf: 'center',
+      top: '50%',
+      marginTop: -28,
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'rgba(255,255,255,0.92)',
+    },
+    viewerMedia: {
+      width: '100%',
+      height: 380,
+      borderRadius: radius.md,
+      backgroundColor: colors.surfaceAlt,
+      overflow: 'hidden',
+    },
+    viewerTitle: { ...type.title, color: colors.text, paddingHorizontal: 2 },
+    viewerMeta: { ...type.caption, color: colors.muted, paddingHorizontal: 2 },
+    viewerActions: { flexDirection: 'row', gap: spacing.xs, marginTop: spacing.xs },
+    viewerBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 11,
+      paddingHorizontal: spacing.sm,
+      borderRadius: radius.pill,
+      borderWidth: 1,
+      borderColor: colors.border,
+      flexGrow: 1,
+    },
+    viewerBtnPrimary: { backgroundColor: colors.accent, borderColor: colors.accent },
+    viewerBtnText: { ...type.caption, color: colors.text },
+    viewerBtnPrimaryText: { color: colors.background },
+    viewerHint: { ...type.caption, color: colors.muted, paddingHorizontal: 2 },
   });
 };
