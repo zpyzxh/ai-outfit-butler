@@ -25,6 +25,7 @@ import {
   demoResultFor,
 } from '@/lib/demo';
 import { toUserMessage } from '@/lib/errors';
+import { saveRemoteFile, suggestFilename } from '@/lib/download';
 import { CAN_CAPTURE_FRAME, captureLastFrame, saveBackFrame } from '@/lib/garmentBack';
 import { publishInspirationFromUrl } from '@/lib/inspirationUpload';
 import { clearInflight, loadInflight, saveInflight } from '@/lib/inflight';
@@ -125,6 +126,8 @@ export default function TryonScreen() {
   const [resultNote, setResultNote] = useState<string | null>(null);
   const [showBackRef, setShowBackRef] = useState(false);
   const [savingBack, setSavingBack] = useState(false);
+  // 下载是浏览器异步动作，给一句反馈，避免用户以为按钮没反应
+  const [saveHint, setSaveHint] = useState<string | null>(null);
   const [backSavedHint, setBackSavedHint] = useState<string | null>(null);
   const [resultTaskId, setResultTaskId] = useState<string | null>(null);
   const [completedSteps, setCompletedSteps] = useState<{ label: string; url: string }[]>([]);
@@ -143,6 +146,9 @@ export default function TryonScreen() {
   const [published, setPublished] = useState(false);
 
   const aliveRef = useRef(true);
+  // 用户主动取消：只停前端轮询与后续叠加，服务端那一张照跑（钱已经花了），
+  // 所以取消不删任务、也不清 inflight —— 回来后还能在「我的」看到它。
+  const cancelRef = useRef(false);
   const chainLockRef = useRef(false);
   const videoLockRef = useRef(false);
 
@@ -388,6 +394,7 @@ export default function TryonScreen() {
     while (Date.now() - startedAt < MAX_WAIT_MS) {
       await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
       if (!aliveRef.current) return null;
+      if (cancelRef.current) return null;
 
       try {
         const task = await fetchTryonTask(taskId);
@@ -437,6 +444,8 @@ export default function TryonScreen() {
     // 演示模式：按件数走一遍进度，最后给预生成的真实结果，不调用任何 AI
     if (DEMO_MODE) {
       chainLockRef.current = true;
+      cancelRef.current = false;
+      setResultNote(null);
       setError(null);
       setGenerating(true);
       setResultUrl(null);
@@ -448,6 +457,7 @@ export default function TryonScreen() {
       const done: { label: string; url: string }[] = [];
       try {
         for (let index = 0; index < chain.length; index += 1) {
+          if (cancelRef.current) break;
           const garment = chain[index];
           setStep({
             index: index + 1,
@@ -470,6 +480,10 @@ export default function TryonScreen() {
         if (aliveRef.current) {
           setGenerating(false);
           setStep(null);
+          setStageLabel('');
+          if (cancelRef.current && done.length < chain.length) {
+            setResultNote(`已取消：先完成的 ${done.length} 件保留在结果里。`);
+          }
         }
         chainLockRef.current = false;
       }
@@ -477,6 +491,8 @@ export default function TryonScreen() {
     }
 
     chainLockRef.current = true;
+    cancelRef.current = false;
+    setResultNote(null);
     setError(null);
     setGenerating(true);
     setResultUrl(null);
@@ -490,6 +506,7 @@ export default function TryonScreen() {
 
     try {
       for (let index = 0; index < chain.length; index += 1) {
+        if (cancelRef.current) break;
         const garment = chain[index];
         if (!aliveRef.current) return;
         setStep({
@@ -512,7 +529,12 @@ export default function TryonScreen() {
         });
 
         const url = await pollTryon(taskId);
-        if (!url || !aliveRef.current) return;
+        if (!aliveRef.current) return;
+        if (!url) {
+          // 取消时提前出循环：已完成的那几件留在结果区
+          if (cancelRef.current) break;
+          return;
+        }
 
         currentPhoto = url;
         done.push({ label: garment.name, url });
@@ -527,9 +549,23 @@ export default function TryonScreen() {
       if (aliveRef.current) {
         setGenerating(false);
         setStep(null);
+        setStageLabel('');
+        if (cancelRef.current && done.length < chain.length) {
+          setResultNote(
+            done.length
+              ? `已取消：先完成的 ${done.length} 件保留在结果里，剩下的可以稍后重试。`
+              : '已取消。那一件可能仍在后台生成，稍后到「我的」看看。',
+          );
+        }
       }
       chainLockRef.current = false;
     }
+  };
+
+  const cancelTryon = () => {
+    if (!generating) return;
+    cancelRef.current = true;
+    setStageLabel('正在取消…');
   };
 
   // 有背面平铺图的单品才能看背面；多层时取第一件有背面图的
@@ -540,6 +576,15 @@ export default function TryonScreen() {
     () => chain.find((item) => !item.back_image_url) ?? null,
     [chain],
   );
+
+  const saveResultLocally = async () => {
+    const url = videoUrl ?? resultUrl;
+    if (!url) return;
+    const kind = videoUrl ? 'video' : 'image';
+    setSaveHint(null);
+    const result = await saveRemoteFile(url, suggestFilename(kind, resultTaskId), kind);
+    setSaveHint(result.message);
+  };
 
   const saveBackFromVideo = async () => {
     if (!videoUrl || !backFrameGarment) return;
@@ -874,7 +919,12 @@ export default function TryonScreen() {
                     ]}
                   />
                 </View>
-                <Text style={styles.progressHint}>{stageLabel} · 单张约需 40–70 秒，请勿离开</Text>
+                <View style={styles.progressFoot}>
+                  <Text style={styles.progressHint}>{stageLabel} · 单张约需 40–70 秒</Text>
+                  <Pressable onPress={cancelTryon} hitSlop={10} style={styles.cancelButton}>
+                    <Text style={styles.cancelText}>取消</Text>
+                  </Pressable>
+                </View>
               </>
             ) : null}
           </View>
@@ -1012,6 +1062,12 @@ export default function TryonScreen() {
             <Text style={styles.publishHint}>
               发布后所有人都能在首页看到这套搭配；全身照不会公开，只有这张结果图会。
             </Text>
+
+            <Pressable onPress={() => void saveResultLocally()} style={styles.saveButton}>
+              <AppIcon name="download" size={15} color={colors.text} />
+              <Text style={styles.videoButtonText}>{videoUrl ? '保存视频到本地' : '保存图片到本地'}</Text>
+            </Pressable>
+            {saveHint ? <Text style={styles.publishHint}>{saveHint}</Text> : null}
           </View>
         ) : null}
 
@@ -1293,6 +1349,15 @@ const makeStyles = (theme: Theme) => {
     progressLabel: { ...type.body, color: colors.text, fontSize: 12 },
     progressTrack: { height: 3, borderRadius: 2, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
     progressFill: { height: '100%', backgroundColor: colors.accent },
+    progressFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+    cancelButton: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 4,
+      borderRadius: radius.pill,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    cancelText: { ...type.caption, color: colors.muted },
     progressHint: { ...type.caption, color: colors.muted, fontSize: 10 },
 
     resultBlock: { gap: spacing.sm },
@@ -1336,6 +1401,18 @@ const makeStyles = (theme: Theme) => {
       backgroundColor: colors.surface,
     },
     videoButtonDisabled: { opacity: 0.6 },
+    saveButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 13,
+      borderRadius: radius.pill,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      marginTop: spacing.xs,
+    },
     publishHint: { ...type.caption, color: colors.muted, marginTop: spacing.xs, lineHeight: 17 },
     captionInput: {
       minHeight: 84,

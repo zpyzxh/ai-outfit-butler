@@ -35,6 +35,7 @@ const SEMANTIC = {
   swap: 'repeat',
   globe: 'globe',
   upload: 'upload-cloud',
+  download: 'download',
   play: 'play-circle',
   arrowUp: 'arrow-up',
   palette: 'droplet',
