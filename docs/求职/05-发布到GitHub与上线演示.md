@@ -28,14 +28,36 @@
 | 真实后端数据 | ✅ 灵感流 6 条、搭配 3 套均来自线上 Supabase |
 | 环境变量内联 | ✅ 打包产物里能搜到项目域名 |
 | 天气链 | ✅ 新 origin 首屏显示「18° 阴」（顺手修了一个「新设备永远天气不可用」的 bug，见迭代报告第 28 节） |
+| **Pages 子路径** | ✅ 用 `EXPO_BASE_URL=/ai-outfit-butler` 重导一份，再用 `.tools/serve-dist.mjs <root> 8091 /ai-outfit-butler` 在本机拟合 Pages 行为：`/ai-outfit-butler/outfits` 直开、14 张图 0 裂图、`_expo/...js` 返回 `text/javascript`、`/` 返回 404 不影响） |
 
-> 唯一没验证的是 Pages 上的子路径（`/ai-outfit-butler/`），这一步只能推上去才知道；万一 404，看第 4 节 Q2。
+> 到这一步，「能不能在 Pages 上跑」已经不是未知数；剩下只有「workflow 能不能在 GitHub 的 runner 上重现同一件事」。万一 Pages 上 404，看第 4 节 Q2。
 
 ---
 
-## 1. 路线 A：我代劳（需要你给一个 GitHub Token）
+## 0.9 现在最快的路：你只建仓，我 push（git 已装好）
 
-因为本机没装 git，我用 GitHub 的 REST API 直接建仓、上传全部源码、开 Pages。你只需要给一个 Token。
+本机现在有 git 了（PortableGit 2.56.1，`.tools/git/cmd/git.exe`，带 Git Credential Manager）：
+仓库已 `git init` 并完成两次提交（`9ec1f63` 主体 + `7597d40` 忽略构建产物），115 个文件已入库，`.env` / `node_modules` / `dist` 都没进去。
+
+你只需：
+
+1. 打开 <https://github.com/new>，仓库名 **`ai-outfit-butler`**，选 **Public**，**不要**勾 README
+2. 回我一句「建好了」（顺便告诉我你的用户名）
+
+然后我执行：
+
+```bash
+git remote add origin https://github.com/<用户名>/ai-outfit-butler.git
+git push -u origin main
+```
+
+push 时 Git Credential Manager 会弹出浏览器让你登录 GitHub（一次授权即可），之后 workflow 自动建站、自动开 Pages。
+
+---
+
+## 1. 路线 A：只给 Token（不需要弹浏览器）
+
+适合「不想在这台机器上登录 GitHub」的情况：用 GitHub REST API 建仓、上传源码、开 Pages。
 
 ### 你要做的（2 分钟）
 
