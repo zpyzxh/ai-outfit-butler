@@ -13,8 +13,9 @@
 
 技术栈：Expo React Native (TypeScript, expo-router) + Supabase（Postgres / Storage / Edge Functions）+ Aidge 试衣 + 图生视频提供方。
 
-> 2026-11-16 结构大改版说明见 [`docs/迭代报告-2026-11-16.md`](docs/迭代报告-2026-11-16.md)，
-> 后端待办与服务端方案见 [`docs/后端优化路线图.md`](docs/后端优化路线图.md)。
+> 结构大改版与逐条修 bug 记录见 [`docs/迭代报告-2026-11-16.md`](docs/迭代报告-2026-11-16.md)，
+> 后端待办与服务端方案见 [`docs/后端优化路线图.md`](docs/后端优化路线图.md)，
+> **面试/演示材料（简历措辞、一页纸、12 页讲解、录屏脚本、扫码卡）统一在 [`docs/面试材料/`](docs/面试材料/00-从这里开始.md)**。
 
 ---
 
@@ -72,7 +73,7 @@ AI穿搭管家/
 ├─ supabase/
 │  ├─ migrations/                 # 001 → 020（013–020 已应用到线上，见 docs 迭代报告八 ~ 十四节）
 │  └─ functions/                  # tryon / video / chat / payment
-├─ docs/                          # 迭代报告、后端路线图
+├─ docs/                          # 迭代报告、后端路线图、面试材料/（投递与演示用的成品）
 ├─ scripts/                       # 一次性运维脚本（存量照片迁移等）
 ├─ app.json / eas.json / package.json
 └─ AGENTS.md / .trae/rules/project_rules.md
