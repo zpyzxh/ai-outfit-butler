@@ -15,6 +15,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppIcon } from '@/components/icons';
 import { ResultVideo } from '@/components/ResultVideo';
+import {
+  DEMO_BADGE,
+  DEMO_MODE,
+  DEMO_SAMPLE_PHOTO,
+  DEMO_TRYON_STEP_MS,
+  DEMO_VIDEO,
+  DEMO_VIDEO_MS,
+  demoResultFor,
+} from '@/lib/demo';
 import { toUserMessage } from '@/lib/errors';
 import { CAN_CAPTURE_FRAME, captureLastFrame, saveBackFrame } from '@/lib/garmentBack';
 import { publishInspirationFromUrl } from '@/lib/inspirationUpload';
@@ -343,6 +352,18 @@ export default function TryonScreen() {
   const choosePhoto = async () => {
     if (uploading || generating) return;
     setError(null);
+
+    // 演示模式：不选文件、不上传，直接用内置示例全身照
+    if (DEMO_MODE) {
+      setPhotoUrl(DEMO_SAMPLE_PHOTO);
+      setPhotoView(DEMO_SAMPLE_PHOTO);
+      setResultUrl(null);
+      setResultTaskId(null);
+      setCompletedSteps([]);
+      setVideoUrl(null);
+      return;
+    }
+
     setUploading(true);
     try {
       const url = await pickAndUploadUserPhoto();
@@ -412,6 +433,48 @@ export default function TryonScreen() {
       return;
     }
     if (chainLockRef.current) return;
+
+    // 演示模式：按件数走一遍进度，最后给预生成的真实结果，不调用任何 AI
+    if (DEMO_MODE) {
+      chainLockRef.current = true;
+      setError(null);
+      setGenerating(true);
+      setResultUrl(null);
+      setResultTaskId(null);
+      setCompletedSteps([]);
+      setVideoUrl(null);
+      setWaitedSeconds(0);
+
+      const done: { label: string; url: string }[] = [];
+      try {
+        for (let index = 0; index < chain.length; index += 1) {
+          const garment = chain[index];
+          setStep({
+            index: index + 1,
+            total: chain.length,
+            garment,
+            label: `${ROLE_LABEL[roleOf(garment)]} · ${garment.name}`,
+            previewUrl: index === 0 ? DEMO_SAMPLE_PHOTO : done[index - 1].url,
+          });
+          setStageLabel(index === 0 ? '正在生成试穿效果' : `正在叠加第 ${index + 1} 件`);
+          await new Promise((resolve) => setTimeout(resolve, DEMO_TRYON_STEP_MS));
+          if (!aliveRef.current) return;
+          const url = demoResultFor(index);
+          done.push({ label: garment.name, url });
+          setCompletedSteps([...done]);
+          setResultUrl(url);
+        }
+        setStageLabel('');
+        setResultNote(`${DEMO_BADGE}：这张图来自本项目真实跑过的结果，演示模式下不会真的调用 AI，也不消耗额度。`);
+      } finally {
+        if (aliveRef.current) {
+          setGenerating(false);
+          setStep(null);
+        }
+        chainLockRef.current = false;
+      }
+      return;
+    }
 
     chainLockRef.current = true;
     setError(null);
@@ -529,11 +592,34 @@ export default function TryonScreen() {
   };
 
   const startVideo = async () => {
+    if (videoLockRef.current) return;
+
+    // 演示模式：等一小会儿直接播放预生成的真实视频（现场不用排队等 20 分钟）
+    if (DEMO_MODE) {
+      videoLockRef.current = true;
+      setGeneratingVideo(true);
+      setVideoUrl(null);
+      setVideoWaited(0);
+      setError(null);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, DEMO_VIDEO_MS));
+        if (aliveRef.current) {
+          setVideoUrl(DEMO_VIDEO);
+          setResultNote(`${DEMO_BADGE}：这段 5 秒视频同样是真实生成过的，含转身定格背面。`);
+        }
+      } finally {
+        if (aliveRef.current) setGeneratingVideo(false);
+        videoLockRef.current = false;
+      }
+      return;
+    }
+
+    // 真实链路：没有任务号就提示（演示模式在上面已经提前返回）
     if (!resultTaskId) {
       setError('先生成试穿图，再生成视频');
       return;
     }
-    if (videoLockRef.current) return;
+
     videoLockRef.current = true;
     setGeneratingVideo(true);
     setVideoUrl(null);
@@ -599,6 +685,14 @@ export default function TryonScreen() {
         <Text style={styles.subtitle}>
           上传一张全身照，选 1–3 件单品，按「上装 → 外套 → 下装」顺序逐件叠加。
         </Text>
+        {DEMO_MODE ? (
+          <View style={styles.demoBadge}>
+            <AppIcon name="info" size={12} color={colors.muted} />
+            <Text style={styles.demoBadgeText}>
+              演示模式：试穿与视频直接给预生成的真实样例，不调用 AI、不消耗额度
+            </Text>
+          </View>
+        ) : null}
 
         {/* 1. 全身照 */}
         <View style={styles.section}>
@@ -822,8 +916,10 @@ export default function TryonScreen() {
             ) : null}
             {completedSteps.length > 1 ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stepStrip}>
-                {completedSteps.map((item) => (
-                  <View key={item.url} style={styles.stepThumb}>
+                {completedSteps.map((item, index) => (
+                  // 演示模式下样例图会循环复用，同一 url 可能出现两次，
+                  // 用 index 参与 key，避免 React 报 "two children with the same key"
+                  <View key={`${index}-${item.label}`} style={styles.stepThumb}>
                     <Image source={{ uri: item.url }} style={styles.stepThumbImage} />
                     <Text style={styles.stepThumbLabel} numberOfLines={1}>
                       {item.label}
@@ -879,7 +975,7 @@ export default function TryonScreen() {
               </Text>
             ) : null}
             {videoUrl ? <ResultVideo uri={videoUrl} /> : null}
-            {videoUrl && CAN_CAPTURE_FRAME && backFrameGarment ? (
+            {videoUrl && CAN_CAPTURE_FRAME && backFrameGarment && !DEMO_MODE ? (
               <>
                 <Pressable
                   onPress={() => void saveBackFromVideo()}
@@ -1039,6 +1135,16 @@ const makeStyles = (theme: Theme) => {
     eyebrow: { ...type.label, color: colors.muted, letterSpacing: 1.4 },
     title: { ...type.display, fontSize: 30, lineHeight: 36 },
     subtitle: { ...type.caption, color: colors.muted, lineHeight: 18, marginTop: -6 },
+    demoBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingVertical: 7,
+      paddingHorizontal: 10,
+      borderRadius: radius.md,
+      backgroundColor: colors.surfaceAlt,
+    },
+    demoBadgeText: { ...type.caption, color: colors.muted, flex: 1, lineHeight: 16 },
 
     section: { gap: spacing.sm },
     sectionHead: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
