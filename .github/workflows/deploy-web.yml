@@ -1,0 +1,83 @@
+name: Deploy web demo to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Resolve base path
+        id: base
+        run: |
+          # 仓库名是 <user>.github.io 时部署在根路径，否则在 /<repo>/ 子路径
+          repo="${{ github.event.repository.name }}"
+          if [[ "$repo" == *.github.io ]]; then
+            echo "value=" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=/$repo" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Prepare environment
+        env:
+          SB_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          SB_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          # 优先用仓库 Secrets；没配则回落到仓库里的演示配置（anon key 本身就是公开凭证）
+          if [ -n "$SB_URL" ] && [ -n "$SB_KEY" ]; then
+            printf 'EXPO_PUBLIC_SUPABASE_URL=%s\nEXPO_PUBLIC_SUPABASE_ANON_KEY=%s\n' "$SB_URL" "$SB_KEY" > .env
+            echo "using repository secrets"
+          else
+            cp .env.demo .env
+            echo "using .env.demo fallback"
+          fi
+
+      - name: Build web bundle
+        env:
+          EXPO_BASE_URL: ${{ steps.base.outputs.value }}
+          EXPO_NO_TELEMETRY: "1"
+        run: npx expo export --platform web
+
+      - name: SPA fallback for deep links
+        run: cp dist/index.html dist/404.html
+
+      # enablement: true 会在第一次运行时用 GITHUB_TOKEN 自动把 Pages 的
+      # Source 切到 "GitHub Actions"（省掉去 Settings 手动点那一步）
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
