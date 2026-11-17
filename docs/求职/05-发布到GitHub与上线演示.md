@@ -18,6 +18,17 @@
 
 ---
 
+## 0.1 已上线（2026-11-17）
+
+| 项 | 值 |
+|---|---|
+| 站点 | https://zpyzxh.github.io/ai-outfit-butler/ |
+| 仓库 | https://github.com/zpyzxh/ai-outfit-butler（public，115 个文件 / 5 次提交） |
+| 部署 | GitHub Actions run #3 `WORKFLOW_RUN_CONCLUSION_SUCCESS`，push 到 `main` 自动构建部署 |
+| 线上验收 | 首页 6 条灵感、天气 `16° 阴`、`/outfits` 深链 14 张图 0 裂图、`favicon.ico` `image/vnd.microsoft.icon`、`404.html` 兜底可达 |
+
+> 下面 0.5 节保留为「上线前我们本地验过什么」的记录，说明这次不是靠运气。
+
 ## 0.5 已经本地验证过的（所以在 Pages 上大概率一次成功）
 
 | 验证项 | 结果 |

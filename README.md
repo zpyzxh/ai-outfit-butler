@@ -1,5 +1,9 @@
 # AI 穿搭管家
 
+> **在线演示（Web）**：https://zpyzxh.github.io/ai-outfit-butler/　·　**源码**：https://github.com/zpyzxh/ai-outfit-butler
+>
+> 移动端为 Expo RN 同一套代码（iOS / Android），Web 版是给面试与演示用的入口。
+
 时尚穿搭 App：**看灵感 → 挑搭配 → 整套试穿 → 生成动态视频 → 收藏/发布**。
 
 技术栈：Expo React Native (TypeScript, expo-router) + Supabase（Postgres / Storage / Edge Functions）+ Aidge 试衣 + 图生视频提供方。
