@@ -7,8 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  View,
-} from 'react-native';
+  View, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AccountSection } from '@/components/AccountSection';
@@ -17,6 +16,7 @@ import { AppIcon } from '@/components/icons';
 import { ResultVideo } from '@/components/ResultVideo';
 import { StyleProfileSheet } from '@/components/StyleProfileSheet';
 import { ensureSession, useAuth } from '@/lib/auth';
+import { DEMO_HISTORY, isDemoRecord, shouldUseDemoHistory } from '@/lib/demoRecords';
 import { toUserMessage } from '@/lib/errors';
 import { loadFavorites, toggleLookFavorite, type Favorites } from '@/lib/favorites';
 import { buildOutfits, type Outfit } from '@/lib/outfits';
@@ -31,6 +31,14 @@ import { deleteTryonTask, fetchGarments, fetchTryonHistory, type Garment, type T
 import { THEME_LIST, useTheme, type Theme } from '@/theme';
 
 type HistoryTask = TryonTask & { garment: { id: string; name: string; category: string } | null };
+
+/** Web 上直接带 ?demo=1 重开页面；原生端演示模式靠构建期开关，这里给个兜底提示 */
+function enterDemoMode() {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  const url = new URL(window.location.href);
+  url.searchParams.set('demo', '1');
+  window.location.href = url.toString();
+}
 
 const STATUS_LABEL: Record<string, string> = {
   done: '已完成',
@@ -58,6 +66,8 @@ export default function ProfileScreen() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  // 当前列表是不是「演示记录」，用来加标注并禁掉删除
+  const [demoHistory, setDemoHistory] = useState(false);
 
   const aliveRef = useRef(true);
   const deletingLockRef = useRef(false);
@@ -78,7 +88,15 @@ export default function ProfileScreen() {
         fetchGarments().catch(() => [] as Garment[]),
       ]);
       if (!aliveRef.current) return;
-      setTasks(history);
+      // 演示模式 + 本机一条真实记录都没有：用预置的真实结果顶上，
+      // 否则访客进「我的」只看得到空态（记录是按 owner 过滤的，种子数据写不进未知 uid）
+      if (shouldUseDemoHistory(history.length)) {
+        setTasks(DEMO_HISTORY as unknown as HistoryTask[]);
+        setDemoHistory(true);
+      } else {
+        setTasks(history);
+        setDemoHistory(false);
+      }
       setGarments(wardrobe);
     } finally {
       if (aliveRef.current) setLoading(false);
@@ -212,6 +230,15 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
 
+        {demoHistory ? (
+          <View style={styles.demoBanner}>
+            <AppIcon name="info" size={13} color={colors.muted} />
+            <Text style={styles.demoBannerText}>
+              演示记录：这 3 条是项目真实跑出来的效果，放在这里让访客不用等生成也能看到结果；你自己的记录会实时出现在上方。
+            </Text>
+          </View>
+        ) : null}
+
         {loading ? (
           <View style={styles.state}>
             <ActivityIndicator color={colors.accent} />
@@ -233,6 +260,11 @@ export default function ProfileScreen() {
             <Pressable onPress={() => router.push('/(tabs)/tryon' as never)} style={styles.retry}>
               <Text style={styles.retryText}>去试衣</Text>
             </Pressable>
+            {Platform.OS === 'web' ? (
+              <Pressable onPress={() => enterDemoMode()} hitSlop={8} style={styles.demoLink}>
+                <Text style={styles.demoLinkText}>没有照片？先看演示效果 →</Text>
+              </Pressable>
+            ) : null}
           </View>
         ) : (
           <View style={styles.list}>
@@ -273,6 +305,10 @@ export default function ProfileScreen() {
                       >
                         {STATUS_LABEL[task.status] ?? '处理中'}
                       </Text>
+                      {isDemoRecord(task.id) ? (
+                        // 演示记录不在库里，删不了；改为标注来源，避免点了报错
+                        <Text style={styles.demoTag}>演示记录</Text>
+                      ) : (
                       <Pressable
                         disabled={deletingId !== null}
                         onPress={() => void removeTask(task)}
@@ -288,6 +324,7 @@ export default function ProfileScreen() {
                           </>
                         )}
                       </Pressable>
+                      )}
                     </View>
                   </View>
                 </View>
@@ -606,6 +643,26 @@ const makeStyles = (theme: Theme) => {
       minHeight: 44,
       paddingHorizontal: 6,
     },
+    demoBanner: {
+      flexDirection: 'row',
+      gap: 8,
+      padding: spacing.sm,
+      borderRadius: radius.md,
+      backgroundColor: colors.surfaceAlt,
+      marginBottom: spacing.sm,
+    },
+    demoBannerText: { ...type.caption, color: colors.muted, flex: 1, lineHeight: 17 },
+    demoTag: {
+      ...type.caption,
+      color: colors.muted,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 4,
+      borderRadius: radius.pill,
+      backgroundColor: colors.surfaceAlt,
+      overflow: 'hidden',
+    },
+    demoLink: { marginTop: spacing.sm, paddingVertical: 6 },
+    demoLinkText: { ...type.caption, color: colors.text, textDecorationLine: 'underline' },
     deleteText: { ...type.label, color: colors.danger },
 
     rail: { gap: 10, paddingRight: spacing.md },
